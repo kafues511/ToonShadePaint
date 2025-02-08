@@ -1,0 +1,112 @@
+// Copyright © 2024-2025 kafues511 All Rights Reserved.
+
+/*=============================================================================
+	SDFCalc.usf: 
+=============================================================================*/
+
+
+#include "/Engine/Private/Common.ush"
+
+
+static const float kHalfMax = 65535.0;
+
+
+uint LayerIndex;
+int2 TextureSize;
+
+Texture2DArray<uint> SeedFlagsTexture;
+Texture2D<float4> PositionTexture;
+Texture2D<float4> SDFInnerTexture;
+Texture2D<float4> SDFOuterTexture;
+
+RWTexture2DArray<float> RWSDFTexture;
+RWBuffer<int> RWMaxDistanceBuffer;
+
+
+float4 SafeFetchInner(int2 Coord)
+{
+	BRANCH
+	if (any(Coord < int2(0, 0)) || any(Coord >= TextureSize))
+	{
+		return kHalfMax.xxxx;
+	}
+	else
+	{
+		bool bIsInner = ((SeedFlagsTexture[uint3(Coord, LayerIndex)] & 1u) != 0u);
+	#if FLIP == 0
+		return float4(SDFInnerTexture[Coord].zw, bIsInner ? Coord : kHalfMax.xx);
+	#else
+		return float4(SDFInnerTexture[Coord].xy, bIsInner ? Coord : kHalfMax.xx);
+	#endif
+	}
+}
+
+
+float4 SafeFetchOuter(int2 Coord)
+{
+	BRANCH
+	if (any(Coord < int2(0, 0)) || any(Coord >= TextureSize))
+	{
+		return kHalfMax.xxxx;
+	}
+	else
+	{
+		bool bIsInner = ((SeedFlagsTexture[uint3(Coord, LayerIndex)] & 1u) != 0u);
+	#if FLIP == 0
+		return float4(SDFOuterTexture[Coord].zw, bIsInner ? kHalfMax.xx : Coord);
+	#else
+		return float4(SDFOuterTexture[Coord].xy, bIsInner ? kHalfMax.xx : Coord);
+	#endif
+	}
+}
+
+
+bool IsValidCoord(int2 Coord)
+{
+	FLATTEN
+	if (any(Coord < int2(0, 0)) || any(Coord >= TextureSize))
+	{
+		return false;
+	}
+	else
+	{
+		return true;
+	}
+}
+
+
+[numthreads(32, 32, 1)]
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	if (((SeedFlagsTexture[uint3(DispatchThreadId.xy, LayerIndex)] & 4u) != 0u))
+	{
+		RWSDFTexture[uint3(DispatchThreadId.xy, LayerIndex)] = 0.0;
+		return;
+	}
+
+	float2 CenterCoord = DispatchThreadId.xy;
+	float3 CenterPosition = PositionTexture[DispatchThreadId.xy].xyz;
+
+	float4 SafeInner = SafeFetchInner(DispatchThreadId.xy);
+	float4 SafeOuter = SafeFetchOuter(DispatchThreadId.xy);
+
+	float3 SafeInnerXYPosition = IsValidCoord(SafeInner.xy) ? PositionTexture[uint2(SafeInner.xy)].xyz : kHalfMax.xxx;
+	float3 SafeInnerZWPosition = IsValidCoord(SafeInner.zw) ? PositionTexture[uint2(SafeInner.zw)].xyz : kHalfMax.xxx;
+
+	float3 SafeOuterXYPosition = IsValidCoord(SafeOuter.xy) ? PositionTexture[uint2(SafeOuter.xy)].xyz : kHalfMax.xxx;
+	float3 SafeOuterZWPosition = IsValidCoord(SafeOuter.zw) ? PositionTexture[uint2(SafeOuter.zw)].xyz : kHalfMax.xxx;
+
+	// -65504..65504
+	float DistSDFInner = distance(SafeInnerXYPosition, CenterPosition) - distance(SafeInnerZWPosition, CenterPosition);
+	float DistSDFOuter = distance(SafeOuterXYPosition, CenterPosition) - distance(SafeOuterZWPosition, CenterPosition);
+
+	// 0..65504
+	DistSDFInner = max(0.0, DistSDFInner);
+	DistSDFOuter = max(0.0, DistSDFOuter);
+
+	float SDF = abs(DistSDFOuter - DistSDFInner);
+
+	RWSDFTexture[uint3(DispatchThreadId.xy, LayerIndex)] = SDF;
+
+	InterlockedMax(RWMaxDistanceBuffer[0], SDF);  // 正規化するために最大値を探す
+}

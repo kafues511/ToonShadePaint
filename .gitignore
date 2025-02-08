@@ -1,0 +1,10 @@
+
+# Ignore intermediate folders
+Intermediate/
+obj/
+
+# Ignore any saved local files
+Saved/
+
+# Ignore fonts folders
+Content/Fonts/

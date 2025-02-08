@@ -1,0 +1,306 @@
+// Copyright © 2024-2025 kafues511 All Rights Reserved.
+
+/*=============================================================================
+	ShapePaintCommon.ush: ShapeとPointの内外判定
+=============================================================================*/
+
+#pragma once
+
+
+#include "/Engine/Private/Common.ush"
+
+
+#define PAINT_TYPE_NONE (0)
+#define PAINT_TYPE_FILL (1)
+#define PAINT_TYPE_MASK (2)
+
+
+#define INVALID_TYPE_NONE (0)
+#define INVALID_TYPE_FILL (1)
+#define INVALID_TYPE_MASK (2)
+
+
+#define SHAPE_TYPE_SPHERE	(0)
+#define SHAPE_TYPE_BOX		(1)
+#define SHAPE_TYPE_CYLINDER	(2)
+#define SHAPE_TYPE_CONE		(3)
+#define SHAPE_TYPE_CAPSULE	(4)
+
+
+bool IsPointInsideSphere(
+	float3 Position,
+	float3 AxisX,
+	float3 AxisY,
+	float3 AxisZ,
+	float3 Center,
+	float3 Extent,
+	float3 MaskAxis,
+	float  MaskAngle,
+	float3 MaskIntensity,
+	float3 FlipCenter,
+	float3 FlipAxis)
+{
+	FLATTEN
+	if (any(abs(FlipAxis) > 0.0))
+	{
+		Position = Position + FlipAxis * (FlipCenter - Position) * 2.0;
+	}
+	else
+	{
+		Position = Position;
+	}
+
+	float3x3 Rotation = float3x3(AxisX, AxisY, AxisZ);
+	float3 Offset = mul(Rotation, Position - Center);
+	float DistSquare = length2(Offset / Extent);
+	bool bIsSphere = DistSquare <= 1.0;
+
+	float3 NormalizedPoint = normalize(((Position - Center) / Extent) * MaskIntensity);
+	float Angle = degrees(acos(dot(NormalizedPoint, mul(normalize(MaskAxis), Rotation))));
+
+	return bIsSphere && Angle <= MaskAngle * 0.5;
+}
+
+
+bool IsPointInsideBox(
+	float3 Position,
+	float3 AxisX,
+	float3 AxisY,
+	float3 AxisZ,
+	float3 Center,
+	float3 Extent,
+	float3 MaskAxis,
+	float  MaskAngle,
+	float3 MaskIntensity,
+	float3 FlipCenter,
+	float3 FlipAxis)
+{
+	FLATTEN
+	if (any(abs(FlipAxis) > 0.0))
+	{
+		Position = Position + FlipAxis * (FlipCenter - Position) * 2.0;
+	}
+	else
+	{
+		Position = Position;
+	}
+
+	float3x3 Rotation = float3x3(AxisX, AxisY, AxisZ);
+	float3 Offset = mul(Rotation, Position - Center);
+	bool bIsBox = all(abs(Offset) <= Extent);
+
+	float3 NormalizedPoint = normalize(((Position - Center) / Extent) * MaskIntensity);
+	float Angle = degrees(acos(dot(NormalizedPoint, mul(normalize(MaskAxis), Rotation))));
+
+	return bIsBox && Angle <= MaskAngle * 0.5;
+}
+
+
+bool IsPointInsideCylinder(
+	float3 Position,
+	float3 AxisX,
+	float3 AxisY,
+	float3 AxisZ,
+	float3 Center,
+	float3 Extent,
+	float3 MaskAxis,
+	float  MaskAngle,
+	float3 MaskIntensity,
+	float3 FlipCenter,
+	float3 FlipAxis)
+{
+	FLATTEN
+	if (any(abs(FlipAxis) > 0.0))
+	{
+		Position = Position + FlipAxis * (FlipCenter - Position) * 2.0;
+	}
+	else
+	{
+		Position = Position;
+	}
+
+	float3x3 Rotation = float3x3(AxisX, AxisY, AxisZ);
+	float3 Offset = mul(Rotation, Position - Center);
+	bool bIsHeight = abs(Offset.z) > Extent.z;
+
+	float DistSquare = length2(Offset.xy / Extent.xy);
+	bool bIsRadius = DistSquare > 1.0;
+
+	float3 NormalizedPoint = normalize(((Position - Center) / Extent) * MaskIntensity);
+	float Angle = degrees(acos(dot(NormalizedPoint, mul(normalize(MaskAxis), Rotation))));
+
+	return !bIsHeight && !bIsRadius && Angle <= MaskAngle * 0.5;
+}
+
+
+bool IsPointInsideCone(
+	float3 Position,
+	float3 AxisX,
+	float3 AxisY,
+	float3 AxisZ,
+	float3 Center,
+	float3 Extent,
+	float3 MaskAxis,
+	float  MaskAngle,
+	float3 MaskIntensity,
+	float3 FlipCenter,
+	float3 FlipAxis)
+{
+	FLATTEN
+	if (any(abs(FlipAxis) > 0.0))
+	{
+		Position = Position + FlipAxis * (FlipCenter - Position) * 2.0;
+	}
+	else
+	{
+		Position = Position;
+	}
+
+	float3x3 Rotation = float3x3(AxisX, AxisY, AxisZ);
+	float3 Offset = mul(Rotation, Position - Center);
+	bool bIsHeight = abs(Offset.z) > 0.5 * Extent.z;
+
+	float NormalizedHeight = (Offset.z + 0.5 * Extent.z) / Extent.z;
+	float2 RadiusAtHeight = Extent.xy * (1.0 - NormalizedHeight);
+	bool bIsRadius = length2(Offset.xy / RadiusAtHeight) > 1.0;
+
+	float3 NormalizedPoint = normalize(((Position - Center) / Extent) * MaskIntensity);
+	float Angle = degrees(acos(dot(NormalizedPoint, mul(normalize(MaskAxis), Rotation))));
+
+	return !bIsHeight && !bIsRadius && Angle <= MaskAngle * 0.5;
+}
+
+
+bool IsPointInsideCapsule(
+	float3 Position,
+	float3 AxisX,
+	float3 AxisY,
+	float3 AxisZ,
+	float3 Center,
+	float3 Extent,
+	float3 MaskAxis,
+	float  MaskAngle,
+	float3 MaskIntensity,
+	float3 FlipCenter,
+	float3 FlipAxis)
+{
+	FLATTEN
+	if (any(abs(FlipAxis) > 0.0))
+	{
+		Position = Position + FlipAxis * (FlipCenter - Position) * 2.0;
+	}
+	else
+	{
+		Position = Position;
+	}
+
+	float3x3 Rotation = float3x3(AxisX, AxisY, AxisZ);
+
+	float Height = Extent.z - Extent.x;
+	float3 CapsuleTop = Center + AxisZ * Height;
+	float3 CapsuleBottom = Center - AxisZ * Height;
+
+	float3 LineSegment = CapsuleTop - CapsuleBottom;
+	float t = saturate(dot(Position - CapsuleBottom, LineSegment) / length2(LineSegment));
+	float3 Closest = CapsuleBottom + t * LineSegment;
+	float Dist = length(Position - Closest);
+	bool bIsCapsule = Dist <= Extent.x;
+
+	float3 NormalizedPoint = normalize(((Position - Center) / Extent) * MaskIntensity);
+	float Angle = degrees(acos(dot(NormalizedPoint, mul(normalize(MaskAxis), Rotation))));
+
+	return bIsCapsule && Angle <= MaskAngle * 0.5;
+}
+
+
+bool IsPointInsideShape(float3 Position, uint Offset, out uint OutPaintType, out uint OutInvalidType)
+{
+	float4 Value00 = MaterialCollection0.Vectors[Offset++];
+	float4 Value01 = MaterialCollection0.Vectors[Offset++];
+	float4 Value02 = MaterialCollection0.Vectors[Offset++];
+	float4 Value03 = MaterialCollection0.Vectors[Offset++];
+	float4 Value04 = MaterialCollection0.Vectors[Offset++];
+	float4 Value05 = MaterialCollection0.Vectors[Offset++];
+	float4 Value06 = MaterialCollection0.Vectors[Offset++];
+	float4 Value07 = MaterialCollection0.Vectors[Offset++];
+	float4 Value08 = MaterialCollection0.Vectors[Offset++];
+
+	float3 AxisX         = Value00.xyz;
+	float3 AxisY         = Value01.xyz;
+	float3 AxisZ         = Value02.xyz;
+	float3 Center        = float3(Value00.w, Value01.w, Value02.w);
+	float3 Extent        = Value03.xyz;
+	uint   Enabled       = (uint)clamp(Value04.x, 0.0, 1.0);
+	uint   ShapeType     = (uint)clamp(Value04.y, 0.0, 4.0);
+	uint   PaintType     = (uint)clamp(Value04.z, 0.0, 2.0);
+	uint   InvalidType   = (uint)clamp(Value04.w, 0.0, 2.0);
+	float3 MaskAxis      = Value05.xyz;
+	float  MaskAngle     = Value05.w;
+	float3 MaskIntensity = Value06.xyz;
+	float3 FlipCenter    = Value07.xyz;
+	float3 FlipAxis      = Value08.xyz;
+
+	bool bIsInside = false;
+	if (Enabled == 0)
+	{
+
+	}
+	else if (ShapeType == SHAPE_TYPE_SPHERE)
+	{
+		bIsInside = IsPointInsideSphere(Position, AxisX, AxisY, AxisZ, Center, Extent, MaskAxis, MaskAngle, MaskIntensity, FlipCenter, FlipAxis);
+	}
+	else if (ShapeType == SHAPE_TYPE_BOX)
+	{
+		bIsInside = IsPointInsideBox(Position, AxisX, AxisY, AxisZ, Center, Extent, MaskAxis, MaskAngle, MaskIntensity, FlipCenter, FlipAxis);
+	}
+	else if (ShapeType == SHAPE_TYPE_CYLINDER)
+	{
+		bIsInside = IsPointInsideCylinder(Position, AxisX, AxisY, AxisZ, Center, Extent, MaskAxis, MaskAngle, MaskIntensity, FlipCenter, FlipAxis);
+	}
+	else if (ShapeType == SHAPE_TYPE_CONE)
+	{
+		bIsInside = IsPointInsideCone(Position, AxisX, AxisY, AxisZ, Center, Extent, MaskAxis, MaskAngle, MaskIntensity, FlipCenter, FlipAxis);
+	}
+	else if (ShapeType == SHAPE_TYPE_CAPSULE)
+	{
+		bIsInside = IsPointInsideCapsule(Position, AxisX, AxisY, AxisZ, Center, Extent, MaskAxis, MaskAngle, MaskIntensity, FlipCenter, FlipAxis);
+	}
+
+	OutPaintType = PaintType;
+	OutInvalidType = InvalidType;
+
+	return bIsInside;
+}
+
+
+bool2 IsPointInsideShapes(float3 Position)
+{
+	bool2 bIsInside = bool2(false, false);
+
+	for (uint Shape = 0; Shape < 64; ++Shape)
+	{
+		uint PaintType, InvalidType;
+		if (IsPointInsideShape(Position, Shape * 16, PaintType, InvalidType))
+		{
+			if (PaintType == PAINT_TYPE_FILL)
+			{
+				bIsInside.x = true;
+			}
+			else if (PaintType == PAINT_TYPE_MASK)
+			{
+				bIsInside.x = false;
+			}
+
+			if (InvalidType == INVALID_TYPE_FILL)
+			{
+				bIsInside.y = true;
+			}
+			else if (InvalidType == INVALID_TYPE_MASK)
+			{
+				bIsInside.y = false;
+			}
+		}
+	}
+
+	return bIsInside;
+}

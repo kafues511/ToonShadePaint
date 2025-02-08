@@ -1,0 +1,28 @@
+// Copyright © 2024-2025 kafues511 All Rights Reserved.
+
+/*=============================================================================
+	SDFNormalized.usf: 
+=============================================================================*/
+
+
+#include "/Engine/Private/Common.ush"
+
+
+uint LayerIndex;
+
+Buffer<int> MaxDistanceBuffer;
+
+RWTexture2DArray<float> RWSDFNormalizedTexture;
+
+
+[numthreads(32, 32, 1)]
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	float SDFMin = 0.0;
+	float SDFMax = MaxDistanceBuffer[0];
+	float SDFValue = RWSDFNormalizedTexture[uint3(DispatchThreadId.xy, LayerIndex)];
+
+	float SDFNormalized = abs(SDFMax - SDFMin) > 0.0 ? (SDFValue - SDFMin) / (SDFMax - SDFMin) : 0.0;
+
+	RWSDFNormalizedTexture[uint3(DispatchThreadId.xy, LayerIndex)] = SDFNormalized;
+}

@@ -1,0 +1,28 @@
+// Copyright © 2024-2025 kafues511 All Rights Reserved.
+
+/*=============================================================================
+	ShadowThresholdMap.usf: 
+=============================================================================*/
+
+
+#include "/Engine/Private/Common.ush"
+
+
+Texture2DArray<uint> SeedFlagsTexture;
+Texture2D<float4> ShadowThresholdTexture;
+
+RWTexture2D<float4> RWShadowThresholdTexture;
+
+
+[numthreads(32, 32, 1)]
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	uint SeedFlags = SeedFlagsTexture[uint3(DispatchThreadId.xy, 0)];
+	bool bIsInvalid = (SeedFlags & 4u) != 0u;  // 指定された無効箇所はBチャンネルに格納でもいいかも
+
+#if FLIP == 0
+	RWShadowThresholdTexture[DispatchThreadId.xy].rg = bIsInvalid ? float2(1.0, 1.0) : ShadowThresholdTexture[DispatchThreadId.xy].rb;
+#else
+	RWShadowThresholdTexture[DispatchThreadId.xy].rg = bIsInvalid ? float2(1.0, 1.0) : ShadowThresholdTexture[DispatchThreadId.xy].ga;
+#endif
+}

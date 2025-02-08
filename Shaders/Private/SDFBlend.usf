@@ -1,0 +1,53 @@
+// Copyright © 2024-2025 kafues511 All Rights Reserved.
+
+/*=============================================================================
+	SDFBlend.usf: 
+=============================================================================*/
+
+
+#include "/Engine/Private/Common.ush"
+
+
+float Start;
+float End;
+
+uint LayerIndex;
+
+Texture2DArray<uint> SeedFlagsTexture;
+Texture2DArray<float> SDFNormalizedTexture;
+
+RWTexture2D<float4> RWShadowThresholdTexture;
+
+
+[numthreads(32, 32, 1)]
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	uint SeedFlags1 = SeedFlagsTexture[uint3(DispatchThreadId.xy, LayerIndex + 0)];
+	uint SeedFlags2 = SeedFlagsTexture[uint3(DispatchThreadId.xy, LayerIndex + 1)];
+
+	bool bIsInner1 = ((SeedFlags1 & 1u) != 0u);
+	bool bIsInner2 = ((SeedFlags2 & 1u) != 0u);
+
+	bool bIsAnyInvalid = (((SeedFlags1 | SeedFlags2) & 4u) != 0u);
+
+	float Mask = (bIsInner1 != bIsInner2 ? 1.0 : 0.0) * (bIsAnyInvalid ? 0.0 : 1.0);
+
+
+	float SDF1Normalized = SDFNormalizedTexture[uint3(DispatchThreadId.xy, LayerIndex + 0)];
+	float SDF2Normalized = SDFNormalizedTexture[uint3(DispatchThreadId.xy, LayerIndex + 1)];
+
+	float Denominator = SDF1Normalized + SDF2Normalized;
+	float Gradient = abs(Denominator) > 0.0 ? SDF1Normalized / Denominator : SDF1Normalized;
+
+
+	float MaskedGradient = (Start + (End - Start) * Gradient) * Mask;
+	float InvMaskedGradient = ((1.0 - Start) + ((1.0 - End) - (1.0 - Start)) * Gradient) * Mask;
+
+#if FLIP == 0
+	RWShadowThresholdTexture[DispatchThreadId.xy].r = RWShadowThresholdTexture[DispatchThreadId.xy].g + MaskedGradient;
+	RWShadowThresholdTexture[DispatchThreadId.xy].b = RWShadowThresholdTexture[DispatchThreadId.xy].a + InvMaskedGradient;
+#else
+	RWShadowThresholdTexture[DispatchThreadId.xy].g = RWShadowThresholdTexture[DispatchThreadId.xy].r + MaskedGradient;
+	RWShadowThresholdTexture[DispatchThreadId.xy].a = RWShadowThresholdTexture[DispatchThreadId.xy].b + InvMaskedGradient;
+#endif
+}

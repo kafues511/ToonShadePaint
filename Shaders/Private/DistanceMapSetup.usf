@@ -1,0 +1,51 @@
+// Copyright © 2024-2025 kafues511 All Rights Reserved.
+
+/*=============================================================================
+	DistanceMapSetup.usf: 
+=============================================================================*/
+
+
+#include "/Engine/Private/Common.ush"
+
+
+static const float kHalfMax = 65535.0;
+
+
+uint LayerIndex;
+
+Texture2DArray<uint> SeedFlagsTexture;
+
+RWTexture2D<float4> RWSDFInnerTexture;
+RWTexture2D<float4> RWSDFOuterTexture;
+
+
+struct FSeedFlags
+{
+	// inner: 明色(Red:1.0)の内側
+	bool bIsInner;
+	// outer: 陰色(Red:0.0)の内側
+	bool bIsOuter;
+	// invalid: テクスチャ座標が範囲外
+	bool bIsInvalid;
+};
+
+
+FSeedFlags SampleSeedFlags(uint2 Coord, uint Dimension)
+{
+	uint Flags = SeedFlagsTexture[uint3(Coord, Dimension)];
+
+	FSeedFlags Out;
+	Out.bIsInner   = ((Flags & 1u) != 0u);
+	Out.bIsOuter   = ((Flags & 2u) != 0u);
+	Out.bIsInvalid = ((Flags & 4u) != 0u);
+	return Out;
+}
+
+
+[numthreads(32, 32, 1)]
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	FSeedFlags Flags = SampleSeedFlags(DispatchThreadId.xy, LayerIndex);
+	RWSDFInnerTexture[DispatchThreadId.xy] = Flags.bIsInner ? kHalfMax.xxxx : DispatchThreadId.xyxy;
+	RWSDFOuterTexture[DispatchThreadId.xy] = Flags.bIsOuter ? kHalfMax.xxxx : DispatchThreadId.xyxy;
+}

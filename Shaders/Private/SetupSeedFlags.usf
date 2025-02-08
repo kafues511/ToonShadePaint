@@ -1,0 +1,30 @@
+// Copyright © 2024-2025 kafues511 All Rights Reserved.
+
+/*=============================================================================
+	SetupSeedFlags.usf: 
+=============================================================================*/
+
+
+#include "/Engine/Private/Common.ush"
+
+
+uint LayerIndex;
+
+Texture2D<float4> SeedTexture;
+
+RWTexture2DArray<uint> RWSeedFlagsTexture;
+
+
+[numthreads(32, 32, 1)]
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	float4 SeedAndAlpha = SeedTexture.Load(uint3(DispatchThreadId.xy, 0));
+
+	uint SeedFlags = 0u;
+	SeedFlags |= SeedAndAlpha.x > 0.5 ? 1u : 0u;  // inner: 明色(Red:1.0)の内側
+	SeedFlags |= SeedAndAlpha.x > 0.5 ? 0u : 2u;  // outer: 陰色(Red:0.0)の内側
+	SeedFlags |= SeedAndAlpha.w > 0.5 ? 4u : 0u;  // invalid: テクスチャ座標が範囲外
+	SeedFlags |= SeedAndAlpha.y > 0.5 ? 4u : 0u;  // invalid: 距離計算から除外
+
+	RWSeedFlagsTexture[uint3(DispatchThreadId.xy, LayerIndex)] = SeedFlags;
+}

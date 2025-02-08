@@ -1,0 +1,20 @@
+// Copyright © 2024-2025 kafues511 All Rights Reserved.
+
+/*=============================================================================
+	SetupPosition.usf: 
+=============================================================================*/
+
+
+#include "/Engine/Private/Common.ush"
+
+
+Texture2D<float4> PositionTexture;
+
+RWTexture2D<float4> RWPositionTexture;
+
+
+[numthreads(32, 32, 1)]
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	RWPositionTexture[DispatchThreadId.xy] = PositionTexture.Load(uint3(DispatchThreadId.xy, 0));
+}

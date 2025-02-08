@@ -1,0 +1,140 @@
+// Copyright © 2024-2025 kafues511 All Rights Reserved.
+
+/*=============================================================================
+	DistanceMapIter.usf: 
+=============================================================================*/
+
+
+#include "/Engine/Private/Common.ush"
+
+
+static const float kHalfMax = 65535.0;
+
+static const uint kSampleCount = 8;
+static const int2 kSampleOffsetArray[] =
+{
+	int2(-1, -1),
+	int2(-1,  0),
+	int2(-1,  1),
+	int2( 0, -1),
+	int2( 0,  1),
+	int2( 1, -1),
+	int2( 1,  0),
+	int2( 1,  1),
+};
+
+
+uint LayerIndex;
+int2 TextureSize;
+int Radius;
+
+Texture2DArray<uint> SeedFlagsTexture;
+Texture2D<float4> PositionTexture;
+
+RWTexture2D<float4> RWSDFInnerTexture;
+RWTexture2D<float4> RWSDFOuterTexture;
+
+
+// NOTE: 未来の私は最適化をするの
+// Total Thread Group Shared Memory storage is 32,768.
+// groupshared float4 SharedColor[2048];
+
+
+struct FTestNano
+{
+	bool bIsInvalid;
+	int2 Coord;
+	float3 Position;
+};
+
+
+FTestNano SafeFetchInner(int2 Coord)
+{
+	FTestNano Out = (FTestNano)0;
+
+	BRANCH
+	if (any(Coord < int2(0, 0)) || any(Coord >= TextureSize))
+	{
+		Out.Coord = kHalfMax.xx;
+		Out.bIsInvalid = true;
+		return Out;
+	}
+	else
+	{
+	#if FLIP == 0
+		Out.Coord = RWSDFInnerTexture[Coord].xy;
+	#else
+		Out.Coord = RWSDFInnerTexture[Coord].zw;
+	#endif
+		Out.bIsInvalid = ((SeedFlagsTexture[uint3(Out.Coord, LayerIndex)].r & 4u) != 0u);
+		Out.Position = PositionTexture[uint2(Out.Coord)].xyz;
+		return Out;
+	}
+}
+
+
+FTestNano SafeFetchOuter(int2 Coord)
+{
+	FTestNano Out = (FTestNano)0;
+
+	BRANCH
+	if (any(Coord < int2(0, 0)) || any(Coord >= TextureSize))
+	{
+		Out.Coord = kHalfMax.xx;
+		Out.bIsInvalid = true;
+		return Out;
+	}
+	else
+	{
+	#if FLIP == 0
+		Out.Coord = RWSDFOuterTexture[Coord].xy;
+	#else
+		Out.Coord = RWSDFOuterTexture[Coord].zw;
+	#endif
+		Out.bIsInvalid = ((SeedFlagsTexture[uint3(Out.Coord, LayerIndex)].r & 4u) != 0u);
+		Out.Position = PositionTexture[uint2(Out.Coord)].xyz;
+		return Out;
+	}
+}
+
+
+[numthreads(32, 32, 1)]
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	if ((SeedFlagsTexture[uint3(DispatchThreadId.xy, LayerIndex)] & 4u) != 0u)
+	{
+		return;
+	}
+
+	float2 CenterCoord = DispatchThreadId.xy;
+	float3 CenterPosition = PositionTexture[DispatchThreadId.xy].xyz;
+
+#if FLIP == 0
+	float2 SDFInner = RWSDFInnerTexture[DispatchThreadId.xy].xy;
+	float2 SDFOuter = RWSDFOuterTexture[DispatchThreadId.xy].xy;
+#else
+	float2 SDFInner = RWSDFInnerTexture[DispatchThreadId.xy].zw;
+	float2 SDFOuter = RWSDFOuterTexture[DispatchThreadId.xy].zw;
+#endif
+
+	float3 SDFInnerPosition = PositionTexture[uint2(SDFInner)].xyz;
+	float3 SDFOuterPosition = PositionTexture[uint2(SDFOuter)].xyz;
+
+	UNROLL
+	for (uint i = 0; i < kSampleCount; ++i)
+	{
+		FTestNano Inner = SafeFetchInner(DispatchThreadId.xy + kSampleOffsetArray[i] * Radius);
+		SDFInner = !Inner.bIsInvalid && distance(CenterPosition, Inner.Position) < distance(SDFInnerPosition, CenterPosition) ? Inner.Coord : SDFInner;
+
+		FTestNano Outer = SafeFetchOuter(DispatchThreadId.xy + kSampleOffsetArray[i] * Radius);
+		SDFOuter = !Outer.bIsInvalid && distance(CenterPosition, Outer.Position) < distance(SDFOuterPosition, CenterPosition) ? Outer.Coord : SDFOuter;
+	}
+
+#if FLIP == 0
+	RWSDFInnerTexture[DispatchThreadId.xy].zw = SDFInner;
+	RWSDFOuterTexture[DispatchThreadId.xy].zw = SDFOuter;
+#else
+	RWSDFInnerTexture[DispatchThreadId.xy].xy = SDFInner;
+	RWSDFOuterTexture[DispatchThreadId.xy].xy = SDFOuter;
+#endif
+}
