@@ -45,11 +45,6 @@ TStatId UToonShadePaintSubsystem::GetStatId() const
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UToonShadePaintSubsystem, STATGROUP_Tickables);
 }
 
-UToonShadePaintSubsystem* UToonShadePaintSubsystem::GetCurrent(const UWorld* World)
-{
-	return UWorld::GetSubsystem<UToonShadePaintSubsystem>(World);
-}
-
 int32 UToonShadePaintSubsystem::GetFreeLayer(const TObjectPtr<AToonShadeShapeActor> InTestShadePaint)
 {
 	{

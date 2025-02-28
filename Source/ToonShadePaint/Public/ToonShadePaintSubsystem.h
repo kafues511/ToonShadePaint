@@ -59,7 +59,10 @@ public:
 	 * @param World World
 	 * @return UToonShadePaintSubsystem
 	 */
-	static inline UToonShadePaintSubsystem* GetCurrent(const UWorld* World);
+	static inline UToonShadePaintSubsystem* GetCurrent(const UWorld* World)
+	{
+		return UWorld::GetSubsystem<UToonShadePaintSubsystem>(World);
+	}
 
 	/**
 	 * 有効なレイヤーか判定
